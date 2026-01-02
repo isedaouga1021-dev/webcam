@@ -109,6 +109,13 @@ gridBtn.onclick = ()=>{
   grid.style.display = grid.style.display==='none'?'block':'none';
 };
 
+resetBtn.onclick = ()=>{
+  try{
+    if(stream){stream.getTracks().forEach(t=>t.stop());}
+  }catch(e){}
+  location.reload();
+};
+
 zoomBtns.forEach(b=>{
   b.onclick = async ()=>{
     const z = Number(b.dataset.z);
