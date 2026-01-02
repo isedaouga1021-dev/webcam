@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+  <title>iPad Camera</title>
+  <style>
+    html, body {
+      margin: 0; padding: 0; height: 100%; background: #000; overflow: hidden;
+      touch-action: manipulation;
+    }
+    #wrap {
+      position: relative; width: 100%; height: 100%;
+    }
+    video {
+      position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover;
+    }
+    /* 下部UI */
+    #controls {
+      position: absolute; left: 0; right: 0; bottom: 20px;
+      display: flex; align-items: center; justify-content: center; gap: 18px;
+      pointer-events: none;
+    }
+    /* シャッターボタン */
+    #shutter {
+      width: 76px; height: 76px; border-radius: 50%;
+      background: #fff; box-shadow: 0 0 0 6px rgba(255,255,255,.35) inset;
+      pointer-events: auto; border: none;
+    }
+    /* ズーム */
+    #zoom {
+      position: absolute; right: 16px; bottom: 110px;
+      display: flex; flex-direction: column; gap: 10px;
+      pointer-events: auto;
+    }
+    .zbtn {
+      background: rgba(0,0,0,.6); color: #fff; border: 1px solid #fff;
+      border-radius: 999px; padding: 8px 12px; font-size: 14px;
+    }
+  </style>
+</head>
+<body>
+  <div id="wrap">
+    <video id="video" autoplay playsinline></video>
+
+    <div id="zoom">
+      <button class="zbtn" data-z="1">1×</button>
+      <button class="zbtn" data-z="2">2×</button>
+      <button class="zbtn" data-z="4">4×</button>
+      <button class="zbtn" data-z="8">8×</button>
+    </div>
+
+    <div id="controls">
+      <button id="shutter" aria-label="shutter"></button>
+    </div>
+  </div>
+
+  <script>
+    const video = document.getElementById('video');
+    const shutter = document.getElementById('shutter');
+    const zoomBtns = document.querySelectorAll('.zbtn');
+    let stream, track, imageCapture;
+
+    async function startCamera() {
+      // 可能な限り最大画質を要求（最終的な解像度は端末依存）
+      stream = await navigator.mediaDevices.getUserMedia({
+        video: {
+          facingMode: 'environment',
+          width: { ideal: 10000 },
+          height: { ideal: 10000 }
+        },
+        audio: false
+      });
+      video.srcObject = stream;
+      track = stream.getVideoTracks()[0];
+      if ('ImageCapture' in window) imageCapture = new ImageCapture(track);
+    }
+
+    // シャッター：確認画面なしで即ダウンロード
+    shutter.addEventListener('click', async () => {
+      try {
+        let blob;
+        if (imageCapture && imageCapture.takePhoto) {
+          blob = await imageCapture.takePhoto();
+        } else {
+          // フォールバック：Canvas
+          const c = document.createElement('canvas');
+          c.width = video.videoWidth; c.height = video.videoHeight;
+          const ctx = c.getContext('2d');
+          ctx.drawImage(video, 0, 0);
+          blob = await new Promise(res => c.toBlob(res, 'image/jpeg', 0.95));
+        }
+        const a = document.createElement('a');
+        const url = URL.createObjectURL(blob);
+        a.href = url;
+        a.download = `photo_${Date.now()}.jpg`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(url);
+      } catch (e) {
+        alert('撮影できませんでした');
+      }
+    });
+
+    // ズーム（対応端末では光学/デジタルズーム、非対応はCSS拡大）
+    zoomBtns.forEach(btn => btn.addEventListener('click', async () => {
+      const z = Number(btn.dataset.z);
+      if (track && track.getCapabilities) {
+        const caps = track.getCapabilities();
+        if (caps.zoom) {
+          const zoom = Math.min(Math.max(z, caps.zoom.min), caps.zoom.max);
+          await track.applyConstraints({ advanced: [{ zoom }] });
+          return;
+        }
+      }
+      // フォールバック
+      video.style.transform = `scale(${z})`;
+    }));
+
+    // 起動
+    startCamera();
+  </script>
+</body>
+</html>
