@@ -2,90 +2,89 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no">
 <title>iPad Camera</title>
 
 <style>
 html,body{
   margin:0;height:100%;background:#000;overflow:hidden;
 }
-#wrap{position:relative;width:100%;height:100%;}
+#wrap{
+  position:relative;width:100%;height:100%;
+  display:flex;justify-content:center;align-items:center;
+  flex-direction:column;
+}
 
-/* ===== カメラ表示（少し大きめ） ===== */
-#cameraFrame{
-  position:absolute;inset:0;
-  display:flex;
-  justify-content:center;
-  align-items:center;
+/* ===== 撮影ビュー ===== */
+#cameraArea{
+  position:relative;
+  width:90%;
+  aspect-ratio:3/4; /* 縦4:横3 */
 }
 video{
-  width:95%;
-  max-height:95%;
-  aspect-ratio:4/3;
-  object-fit:cover;
+  width:100%;height:100%;
+  object-fit:contain;
 }
 
-/* 共通ボタン */
+/* ガイド枠 */
+#guide{
+  position:absolute;inset:0;
+  border:2px dashed rgba(255,255,255,.6);
+  display:none;
+  pointer-events:none;
+}
+
+/* ===== UI ===== */
+#shutter{
+  width:78px;height:78px;
+  border-radius:50%;
+  background:#fff;border:none;
+  margin-top:16px;
+}
+#zoom{
+  position:absolute;right:16px;bottom:140px;
+  display:flex;flex-direction:column;gap:10px;
+}
 .zbtn{
   background:rgba(0,0,0,.6);
-  color:#fff;
-  border:1px solid #fff;
+  color:#fff;border:1px solid #fff;
   border-radius:999px;
-  padding:8px 14px;
-  font-size:14px;
+  padding:8px 12px;
 }
 
 /* 再起動 */
-#reloadBtn{
-  position:absolute;
-  top:16px;
-  right:16px;
-  z-index:10;
-}
-
-/* シャッター */
-#controls{
-  position:absolute;
-  left:0;right:0;bottom:20px;
-  display:flex;justify-content:center;
-}
-#shutter{
-  width:76px;height:76px;
-  border-radius:50%;
-  background:#fff;border:none;
-}
-
-/* ズーム */
-#zoom{
-  position:absolute;
-  right:16px;bottom:110px;
-  display:flex;flex-direction:column;gap:10px;
+#reload{
+  position:absolute;top:16px;right:16px;
 }
 
 /* ===== プレビュー ===== */
 #preview{
   display:none;
-  position:absolute;inset:0;background:#000;
-}
-#previewImg{
-  position:absolute;
-  top:40px;
+  flex-direction:column;
+  align-items:center;
   width:100%;
-  height:calc(100% - 160px);
+}
+#preview img{
+  width:80%;
+  max-height:65%;
   object-fit:contain;
 }
-#previewTop{
-  position:absolute;top:16px;left:16px;
-}
-#shareBar{
-  position:absolute;
-  left:0;right:0;bottom:24px;
-  display:flex;justify-content:center;
-}
 #shareBtn{
-  width:70%;
-  padding:16px 0;
+  margin-top:20px;
+  width:80%;
+  padding:16px;
   font-size:18px;
+}
+
+/* ローディング */
+#loading{
+  display:none;
+  position:absolute;inset:0;
+  background:#000;
+  color:#fff;
+  font-size:18px;
+  justify-content:center;
+  align-items:center;
 }
 </style>
 </head>
@@ -93,112 +92,116 @@ video{
 <body>
 <div id="wrap">
 
-  <button id="reloadBtn" class="zbtn">⟳</button>
-
-  <!-- カメラ -->
-  <div id="cameraFrame">
+  <div id="cameraArea">
     <video id="video" autoplay playsinline></video>
+    <div id="guide"></div>
   </div>
 
-  <!-- プレビュー -->
-  <div id="preview">
-    <img id="previewImg">
-    <div id="previewTop">
-      <button id="backBtn" class="zbtn">📷 戻る</button>
-    </div>
-    <div id="shareBar">
-      <button id="shareBtn" class="zbtn">共有</button>
-    </div>
-  </div>
+  <button id="shutter"></button>
 
-  <!-- ズーム -->
   <div id="zoom">
     <button class="zbtn" data-z="1">1×</button>
     <button class="zbtn" data-z="2">2×</button>
     <button class="zbtn" data-z="4">4×</button>
+    <button class="zbtn" data-z="8">8×</button>
+    <button class="zbtn" id="guideBtn">📐</button>
   </div>
 
-  <!-- シャッター -->
-  <div id="controls">
-    <button id="shutter"></button>
+  <button id="reload" class="zbtn">🔄</button>
+
+  <!-- プレビュー -->
+  <div id="preview">
+    <img id="previewImg">
+    <button id="shareBtn" class="zbtn">📤 共有</button>
   </div>
 
+  <div id="loading">再起動中…</div>
 </div>
 
 <script>
 const video = document.getElementById('video');
 const shutter = document.getElementById('shutter');
 const zoomBtns = document.querySelectorAll('[data-z]');
-const controls = document.getElementById('controls');
-const zoom = document.getElementById('zoom');
 const preview = document.getElementById('preview');
 const previewImg = document.getElementById('previewImg');
-const backBtn = document.getElementById('backBtn');
 const shareBtn = document.getElementById('shareBtn');
-const reloadBtn = document.getElementById('reloadBtn');
+const reloadBtn = document.getElementById('reload');
+const guide = document.getElementById('guide');
+const guideBtn = document.getElementById('guideBtn');
+const loading = document.getElementById('loading');
 
-let zoomLevel = 1;
+let stream, track, imageCapture;
 
-/* カメラ起動 */
-(async()=>{
-  const stream = await navigator.mediaDevices.getUserMedia({
-    video:{facingMode:'environment'}
+// 起動
+async function startCamera(){
+  stream = await navigator.mediaDevices.getUserMedia({
+    video:{
+      facingMode:'environment',
+      width:{ideal:4000},
+      height:{ideal:3000}
+    }
   });
   video.srcObject = stream;
-})();
+  track = stream.getVideoTracks()[0];
+  if('ImageCapture' in window){
+    imageCapture = new ImageCapture(track);
+  }
+}
+startCamera();
 
-/* ズーム（表示＋撮影両対応） */
-zoomBtns.forEach(btn=>{
-  btn.onclick = ()=>{
-    zoomLevel = Number(btn.dataset.z);
-  };
-});
-
-/* 撮影（ズーム反映） */
+// 撮影
 shutter.onclick = async ()=>{
-  const vw = video.videoWidth;
-  const vh = video.videoHeight;
+  let blob;
+  if(imageCapture?.takePhoto){
+    blob = await imageCapture.takePhoto();
+  }else{
+    const c = document.createElement('canvas');
+    c.width = video.videoWidth;
+    c.height = video.videoHeight;
+    c.getContext('2d').drawImage(video,0,0);
+    blob = await new Promise(r=>c.toBlob(r,'image/jpeg',0.95));
+  }
 
-  const sw = vw / zoomLevel;
-  const sh = vh / zoomLevel;
-  const sx = (vw - sw) / 2;
-  const sy = (vh - sh) / 2;
-
-  const canvas = document.createElement('canvas');
-  canvas.width = sw;
-  canvas.height = sh;
-
-  canvas.getContext('2d').drawImage(
-    video,
-    sx, sy, sw, sh,
-    0, 0, sw, sh
-  );
-
-  const blob = await new Promise(r=>canvas.toBlob(r,'image/jpeg',0.95));
   previewImg.src = URL.createObjectURL(blob);
-
-  preview.style.display='block';
-  controls.style.display='none';
-  zoom.style.display='none';
+  preview.style.display = 'flex';
+  document.getElementById('cameraArea').style.display = 'none';
+  shutter.style.display = 'none';
+  document.getElementById('zoom').style.display = 'none';
 };
 
-/* 戻る */
-backBtn.onclick=()=>{
-  preview.style.display='none';
-  controls.style.display='flex';
-  zoom.style.display='flex';
-  URL.revokeObjectURL(previewImg.src);
-};
-
-/* 共有 */
-shareBtn.onclick=async()=>{
-  const blob = await fetch(previewImg.src).then(r=>r.blob());
+// 共有
+shareBtn.onclick = async ()=>{
+  const res = await fetch(previewImg.src);
+  const blob = await res.blob();
   const file = new File([blob],'photo.jpg',{type:'image/jpeg'});
   await navigator.share({files:[file]});
 };
 
-/* 再起動 */
-reloadBtn.onclick=()=>location.reload();
+// ズーム修正
+zoomBtns.forEach(b=>{
+  b.onclick = async ()=>{
+    const z = Number(b.dataset.z);
+    if(track?.getCapabilities){
+      const caps = track.getCapabilities();
+      if(caps.zoom){
+        await track.applyConstraints({advanced:[{zoom:Math.min(z,caps.zoom.max)}]});
+        return;
+      }
+    }
+    video.style.transform = `scale(${z})`;
+  };
+});
+
+// ガイド
+guideBtn.onclick = ()=>{
+  guide.style.display = guide.style.display==='none'?'block':'none';
+};
+
+// 再起動
+reloadBtn.onclick = ()=>{
+  loading.style.display='flex';
+  setTimeout(()=>location.reload(),800);
+};
 </script>
 </body>
 </html>
