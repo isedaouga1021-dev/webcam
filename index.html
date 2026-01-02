@@ -51,6 +51,11 @@
     </div>
 
     <div id="controls">
+      <select id="format" style="position:absolute;left:16px;bottom:20px;pointer-events:auto;">
+        <option value="jpeg">JPEG</option>
+        <option value="raw">RAW</option>
+      </select>
+
       <button id="shutter" aria-label="shutter"></button>
     </div>
   </div>
@@ -59,6 +64,7 @@
     const video = document.getElementById('video');
     const shutter = document.getElementById('shutter');
     const zoomBtns = document.querySelectorAll('.zbtn');
+    const formatSel = document.getElementById('format');
     let stream, track, imageCapture;
 
     async function startCamera() {
