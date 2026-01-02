@@ -1,168 +1,158 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
-  <title>iPad Camera</title>
-  <style>
-    html, body {
-      margin: 0; padding: 0; height: 100%; background: #000; overflow: hidden;
-      touch-action: manipulation;
-    }
-    #wrap {
-      position: relative; width: 100%; height: 100%;
-    }
-    video {
-      position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover;
-    }
-    #controls {
-      position: absolute; left: 0; right: 0; bottom: 20px;
-      display: flex; align-items: center; justify-content: center; gap: 18px;
-      pointer-events: none;
-    }
-    #shutter {
-      width: 76px; height: 76px; border-radius: 50%;
-      background: #fff; box-shadow: 0 0 0 6px rgba(255,255,255,.35) inset;
-      pointer-events: auto; border: none;
-    }
-    #zoom {
-      position: absolute; right: 16px; bottom: 110px;
-      display: flex; flex-direction: column; gap: 10px;
-      pointer-events: auto;
-    }
-    .zbtn {
-      background: rgba(0,0,0,.6); color: #fff; border: 1px solid #fff;
-      border-radius: 999px; padding: 8px 12px; font-size: 14px;
-    }
-  </style>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+<title>iPad Camera</title>
+
+<style>
+html,body{
+  margin:0;height:100%;background:#000;overflow:hidden;
+}
+#wrap{position:relative;width:100%;height:100%;}
+video,canvas,img{
+  position:absolute;inset:0;
+  width:100%;height:100%;
+  object-fit:cover;
+}
+#controls{
+  position:absolute;left:0;right:0;bottom:20px;
+  display:flex;justify-content:center;
+}
+#shutter{
+  width:76px;height:76px;border-radius:50%;
+  background:#fff;border:none;
+}
+#zoom{
+  position:absolute;right:16px;bottom:110px;
+  display:flex;flex-direction:column;gap:10px;
+}
+.zbtn{
+  background:rgba(0,0,0,.6);
+  color:#fff;border:1px solid #fff;
+  border-radius:999px;
+  padding:8px 12px;
+}
+
+/* プレビュー画面 */
+#preview{
+  display:none;
+}
+#previewUI{
+  position:absolute;top:16px;left:0;right:0;
+  display:flex;justify-content:space-between;
+  padding:0 16px;
+}
+</style>
 </head>
+
 <body>
-  <div id="wrap">
-    <video id="video" playsinline></video>
+<div id="wrap">
 
-    <!-- カメラ起動ボタン（右上） -->
-    <button id="startCamera" class="zbtn"
-      style="position:absolute;top:12px;right:12px;font-size:12px;">
-      起動
-    </button>
+  <!-- カメラ -->
+  <video id="video" autoplay playsinline></video>
 
-    <div id="mode" style="position:absolute;left:16px;top:16px;pointer-events:auto;">
-      <button id="autoBtn" class="zbtn">AUTO</button>
-      <button id="manualBtn" class="zbtn">MANUAL</button>
-    </div>
-
-    <div id="manualControls"
-      style="position:absolute;left:16px;top:70px;display:none;flex-direction:column;gap:8px;pointer-events:auto;">
-      <label class="zbtn">SS <input id="shutterSpeed" type="range" min="1" max="1000" value="60"></label>
-      <label class="zbtn">ISO <input id="iso" type="range" min="50" max="3200" value="100"></label>
-      <label class="zbtn">EXP <input id="exposure" type="range" min="-3" max="3" step="0.1" value="0"></label>
-    </div>
-
-    <div id="zoom">
-      <button class="zbtn" data-z="1">1×</button>
-      <button class="zbtn" data-z="2">2×</button>
-      <button class="zbtn" data-z="4">4×</button>
-      <button class="zbtn" data-z="8">8×</button>
-    </div>
-
-    <div id="controls">
-      <select id="format" style="position:absolute;left:16px;bottom:20px;pointer-events:auto;">
-        <option value="jpeg">JPEG</option>
-        <option value="raw">RAW</option>
-      </select>
-      <button id="shutter" aria-label="shutter"></button>
+  <!-- プレビュー -->
+  <div id="preview">
+    <img id="previewImg">
+    <div id="previewUI">
+      <button id="backBtn" class="zbtn">📷 戻る</button>
+      <button id="saveBtn" class="zbtn">💾 保存</button>
     </div>
   </div>
 
-  <script>
-    const video = document.getElementById('video');
-    const shutter = document.getElementById('shutter');
-    const zoomBtns = document.querySelectorAll('.zbtn');
-    const formatSel = document.getElementById('format');
-    const startBtn = document.getElementById('startCamera');
+  <!-- ズーム -->
+  <div id="zoom">
+    <button class="zbtn" data-z="1">1×</button>
+    <button class="zbtn" data-z="2">2×</button>
+    <button class="zbtn" data-z="4">4×</button>
+    <button class="zbtn" data-z="8">8×</button>
+  </div>
 
-    let stream, track, imageCapture;
-    let manual = false;
+  <!-- シャッター -->
+  <div id="controls">
+    <button id="shutter"></button>
+  </div>
 
-    async function startCamera() {
-      try {
-        if (stream) {
-          stream.getTracks().forEach(t => t.stop());
-        }
+</div>
 
-        stream = await navigator.mediaDevices.getUserMedia({
-          video: {
-            facingMode: { ideal: 'environment' }
-          },
-          audio: false
-        });
+<script>
+const video = document.getElementById('video');
+const shutter = document.getElementById('shutter');
+const zoomBtns = document.querySelectorAll('[data-z]');
+const preview = document.getElementById('preview');
+const previewImg = document.getElementById('previewImg');
+const backBtn = document.getElementById('backBtn');
+const saveBtn = document.getElementById('saveBtn');
 
-        video.srcObject = stream;
-        video.muted = true;     // iOS必須
-        await video.play();     // ★黒画面防止
+let stream, track, imageCapture, lastBlob;
 
-        track = stream.getVideoTracks()[0];
-        if ('ImageCapture' in window) {
-          imageCapture = new ImageCapture(track);
-        }
+// カメラ起動
+async function startCamera(){
+  stream = await navigator.mediaDevices.getUserMedia({
+    video:{
+      facingMode:'environment',
+      width:{ideal:10000},
+      height:{ideal:10000}
+    }
+  });
+  video.srcObject = stream;
+  track = stream.getVideoTracks()[0];
+  if('ImageCapture' in window){
+    imageCapture = new ImageCapture(track);
+  }
+}
+startCamera();
 
-        startBtn.style.display = 'none';
-      } catch (e) {
-        alert('カメラ起動失敗: ' + e.name);
+// 撮影
+shutter.onclick = async ()=>{
+  let blob;
+  if(imageCapture?.takePhoto){
+    blob = await imageCapture.takePhoto();
+  }else{
+    const c = document.createElement('canvas');
+    c.width = video.videoWidth;
+    c.height = video.videoHeight;
+    c.getContext('2d').drawImage(video,0,0);
+    blob = await new Promise(r=>c.toBlob(r,'image/jpeg',0.95));
+  }
+
+  lastBlob = blob;
+  previewImg.src = URL.createObjectURL(blob);
+
+  video.style.display = 'none';
+  preview.style.display = 'block';
+};
+
+// 戻る
+backBtn.onclick = ()=>{
+  preview.style.display = 'none';
+  video.style.display = 'block';
+  URL.revokeObjectURL(previewImg.src);
+};
+
+// 保存
+saveBtn.onclick = ()=>{
+  const a = document.createElement('a');
+  a.href = previewImg.src;
+  a.download = `photo_${Date.now()}.jpg`;
+  a.click();
+};
+
+// ズーム
+zoomBtns.forEach(b=>{
+  b.onclick = async ()=>{
+    const z = Number(b.dataset.z);
+    if(track?.getCapabilities){
+      const caps = track.getCapabilities();
+      if(caps.zoom){
+        await track.applyConstraints({advanced:[{zoom:Math.min(z,caps.zoom.max)}]});
+        return;
       }
     }
-
-    startBtn.addEventListener('click', startCamera);
-
-    shutter.addEventListener('click', async () => {
-      try {
-        let blob;
-        if (imageCapture && imageCapture.takePhoto) {
-          blob = await imageCapture.takePhoto();
-        } else {
-          const c = document.createElement('canvas');
-          c.width = video.videoWidth;
-          c.height = video.videoHeight;
-          c.getContext('2d').drawImage(video, 0, 0);
-          blob = await new Promise(r => c.toBlob(r, 'image/jpeg', 0.95));
-        }
-
-        const a = document.createElement('a');
-        const url = URL.createObjectURL(blob);
-        a.href = url;
-        a.download = `photo_${Date.now()}.jpg`;
-        a.click();
-        URL.revokeObjectURL(url);
-      } catch {
-        alert('撮影できませんでした');
-      }
-    });
-
-    zoomBtns.forEach(btn => btn.addEventListener('click', async () => {
-      const z = Number(btn.dataset.z);
-      if (track && track.getCapabilities) {
-        const caps = track.getCapabilities();
-        if (caps.zoom) {
-          await track.applyConstraints({ advanced: [{ zoom: z }] });
-          return;
-        }
-      }
-      video.style.transform = `scale(${z})`;
-    }));
-
-    const autoBtn = document.getElementById('autoBtn');
-    const manualBtn = document.getElementById('manualBtn');
-    const manualControls = document.getElementById('manualControls');
-
-    autoBtn.onclick = () => {
-      manual = false;
-      manualControls.style.display = 'none';
-    };
-
-    manualBtn.onclick = () => {
-      manual = true;
-      manualControls.style.display = 'flex';
-    };
-  </script>
+    video.style.transform = `scale(${z})`;
+  };
+});
+</script>
 </body>
 </html>
