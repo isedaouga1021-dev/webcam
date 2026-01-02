@@ -7,71 +7,40 @@
 
 <style>
 html,body{
-  margin:0;
-  height:100%;
-  background:#000;
-  overflow:hidden;
+  margin:0;height:100%;background:#000;overflow:hidden;
 }
-#wrap{
-  position:relative;
-  width:100%;
-  height:100%;
-}
-video,img{
-  position:absolute;
-  inset:0;
-  width:100%;
-  height:100%;
+#wrap{position:relative;width:100%;height:100%;}
+video,canvas,img{
+  position:absolute;inset:0;
+  width:100%;height:100%;
   object-fit:cover;
 }
-
-/* 共通ボタン */
-.zbtn{
-  background:rgba(0,0,0,.6);
-  color:#fff;
-  border:1px solid #fff;
-  border-radius:999px;
-  padding:8px 12px;
-  font-size:14px;
-}
-
-/* シャッター */
 #controls{
-  position:absolute;
-  left:0; right:0;
-  bottom:20px;
-  display:flex;
-  justify-content:center;
+  position:absolute;left:0;right:0;bottom:20px;
+  display:flex;justify-content:center;
 }
 #shutter{
-  width:76px;
-  height:76px;
-  border-radius:50%;
-  background:#fff;
-  border:none;
+  width:76px;height:76px;border-radius:50%;
+  background:#fff;border:none;
 }
-
-/* ズーム */
 #zoom{
-  position:absolute;
-  right:16px;
-  bottom:110px;
-  display:flex;
-  flex-direction:column;
-  gap:10px;
+  position:absolute;right:16px;bottom:110px;
+  display:flex;flex-direction:column;gap:10px;
+}
+.zbtn{
+  background:rgba(0,0,0,.6);
+  color:#fff;border:1px solid #fff;
+  border-radius:999px;
+  padding:8px 12px;
 }
 
-/* プレビュー */
+/* プレビュー画面 */
 #preview{
   display:none;
 }
 #previewUI{
-  position:absolute;
-  top:16px;
-  left:0;
-  right:0;
-  display:flex;
-  justify-content:space-between;
+  position:absolute;top:16px;left:0;right:0;
+  display:flex;justify-content:space-between;
   padding:0 16px;
 }
 
@@ -113,7 +82,7 @@ video,img{
 
   <!-- シャッター -->
   <div id="controls">
-    <button id="shutter" aria-label="shutter"></button>
+    <button id="shutter"></button>
   </div>
 
 </div>
@@ -126,4 +95,83 @@ const preview = document.getElementById('preview');
 const previewImg = document.getElementById('previewImg');
 const backBtn = document.getElementById('backBtn');
 const saveBtn = document.getElementById('saveBtn');
-const reloadBtn = document.getElementById
+const reloadBtn = document.getElementById('reloadBtn');
+
+let stream, track, imageCapture, lastBlob;
+
+// カメラ起動
+async function startCamera(){
+  stream = await navigator.mediaDevices.getUserMedia({
+    video:{
+      facingMode:'environment',
+      width:{ideal:10000},
+      height:{ideal:10000}
+    }
+  });
+  video.srcObject = stream;
+  track = stream.getVideoTracks()[0];
+  if('ImageCapture' in window){
+    imageCapture = new ImageCapture(track);
+  }
+}
+startCamera();
+
+// 撮影
+shutter.onclick = async ()=>{
+  let blob;
+  if(imageCapture?.takePhoto){
+    blob = await imageCapture.takePhoto();
+  }else{
+    const c = document.createElement('canvas');
+    c.width = video.videoWidth;
+    c.height = video.videoHeight;
+    c.getContext('2d').drawImage(video,0,0);
+    blob = await new Promise(r=>c.toBlob(r,'image/jpeg',0.95));
+  }
+
+  lastBlob = blob;
+  previewImg.src = URL.createObjectURL(blob);
+
+  video.style.display = 'none';
+  preview.style.display = 'block';
+};
+
+// 戻る
+backBtn.onclick = ()=>{
+  preview.style.display = 'none';
+  video.style.display = 'block';
+  URL.revokeObjectURL(previewImg.src);
+};
+
+// 保存
+saveBtn.onclick = ()=>{
+  const a = document.createElement('a');
+  a.href = previewImg.src;
+  a.download = `photo_${Date.now()}.jpg`;
+  a.click();
+};
+
+// ズーム
+zoomBtns.forEach(b=>{
+  b.onclick = async ()=>{
+    const z = Number(b.dataset.z);
+    if(track?.getCapabilities){
+      const caps = track.getCapabilities();
+      if(caps.zoom){
+        await track.applyConstraints({
+          advanced:[{zoom:Math.min(z,caps.zoom.max)}]
+        });
+        return;
+      }
+    }
+    video.style.transform = `scale(${z})`;
+  };
+});
+
+// 再起動（サイトごと）
+reloadBtn.onclick = ()=>{
+  location.reload();
+};
+</script>
+</body>
+</html>
