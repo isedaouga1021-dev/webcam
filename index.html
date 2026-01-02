@@ -41,7 +41,9 @@
 </head>
 <body>
   <div id="wrap">
-    <video id="video" autoplay playsinline></video>
+    <video id="video" playsinline></video>
+
+    <button id="startCamera" class="zbtn" style="position:absolute;inset:0;margin:auto;height:48px;width:180px;pointer-events:auto;">カメラを起動</button>
 
     
 
@@ -69,6 +71,7 @@
     let stream, track, imageCapture;
 
     async function startCamera() {
+      document.getElementById('startCamera').style.display = 'none';() {
       // 可能な限り最大画質を要求（最終的な解像度は端末依存）
       stream = await navigator.mediaDevices.getUserMedia({
         video: {
@@ -153,8 +156,10 @@
       video.style.transform = `scale(${z})`;
     }));
 
-    // 起動
-    startCamera();
+    // カメラ起動はユーザー操作必須（iOS対策）
+    document.getElementById('startCamera').addEventListener('click', () => {
+      startCamera();
+    });
   </script>
 </body>
 </html>
