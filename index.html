@@ -93,157 +93,95 @@
   </div>
 
   <script>
-    const video = document.getElementById('video');
-const preview = document.getElementById('preview');
-const previewImg = document.getElementById('previewImg');
-const backBtn = document.getElementById('backBtn');
-const shareBtn = document.getElementById('shareBtn');
-    const shutter = document.getElementById('shutter');
-    const zoomBtns = document.querySelectorAll('[data-z]');
+const video = document.getElementById('video');
+const shutter = document.getElementById('shutter');
+const zoomBtns = document.querySelectorAll('[data-z]');
 const guide = document.getElementById('guide');
-const guideToggle = document.getElementById('guideToggle');('.zbtn');
-    
-    let stream, track, imageCapture;
+const guideToggle = document.getElementById('guideToggle');
+const startBtn = document.getElementById('startCamera');
 
-    async function startCamera() {
-      const btn = document.getElementById('startCamera');
-      try {
-        // 念のため毎回停止
-        if (stream) {
-          stream.getTracks().forEach(t => t.stop());
-        }
+let stream = null;
+let track = null;
+let imageCapture = null;
 
-        stream = await navigator.mediaDevices.getUserMedia({
-          video: {
-            facingMode: { ideal: 'environment' },
-            width: { ideal: 10000 },
-            height: { ideal: 10000 }
-          },
-          audio: false
-        });
-
-        video.srcObject = stream;
-        video.muted = true; // iOS対策
-        await video.play(); // ★ これが無いと真っ黒になることがある
-
-        track = stream.getVideoTracks()[0];
-        if ('ImageCapture' in window) imageCapture = new ImageCapture(track);
-
-        btn.style.display = 'none';
-      } catch (e) {
-        alert('カメラ起動失敗: ' + e.name);
-        btn.style.display = 'block';
-      }
-    },
-          height: { ideal: 10000 }
-        },
-        audio: false
-      });
-      video.srcObject = stream;
-      track = stream.getVideoTracks()[0];
-      if ('ImageCapture' in window) imageCapture = new ImageCapture(track);
-    }
-
-    // シャッター：確認画面なしで即ダウンロード
-    shutter.addEventListener('click', async () => {
+// ===== カメラ起動 =====
+async function startCamera() {
   try {
-    let blob;
-    if (imageCapture && imageCapture.takePhoto) {
-      blob = await imageCapture.takePhoto();
-    } else {
-      const c = document.createElement('canvas');
-      c.width = video.videoWidth; c.height = video.videoHeight;
-      c.getContext('2d').drawImage(video, 0, 0);
-      blob = await new Promise(res => c.toBlob(res, 'image/jpeg', 0.95));
+    if (stream) {
+      stream.getTracks().forEach(t => t.stop());
     }
 
-    previewImg.src = URL.createObjectURL(blob);
-    preview.style.display = 'block';
-    video.style.display = 'none';
-    document.getElementById('controls').style.display = 'none';
-    document.getElementById('zoom').style.display = 'none';
+    stream = await navigator.mediaDevices.getUserMedia({
+      video: {
+        facingMode: { ideal: 'environment' }
+      },
+      audio: false
+    });
 
-    shareBtn.onclick = async () => {
-      if (navigator.share) {
-        const file = new File([blob], `photo_${Date.now()}.jpg`, { type: 'image/jpeg' });
-        try {
-          await navigator.share({ files: [file], title: 'Photo' });
-        } catch {}
-      }
-    };
+    video.srcObject = stream;
+    video.muted = true; // iOS対策
+    await video.play();
 
-  } catch {
-    alert('撮影できませんでした');
+    track = stream.getVideoTracks()[0];
+    if ('ImageCapture' in window) {
+      imageCapture = new ImageCapture(track);
+    }
+
+    startBtn.style.display = 'none';
+  } catch (e) {
+    alert('カメラを起動できませんでした');
+    startBtn.style.display = 'block';
   }
+}
+
+startBtn.addEventListener('click', startCamera);
+
+// ===== 撮影 =====
+shutter.onclick = async () => {
+  if (!track) return;
+
+  let blob;
+  if (imageCapture?.takePhoto) {
+    blob = await imageCapture.takePhoto();
+  } else {
+    const c = document.createElement('canvas');
+    c.width = video.videoWidth;
+    c.height = video.videoHeight;
+    c.getContext('2d').drawImage(video, 0, 0);
+    blob = await new Promise(r => c.toBlob(r, 'image/jpeg', 0.95));
+  }
+
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `photo_${Date.now()}.jpg`;
+  a.click();
+  URL.revokeObjectURL(url);
+};
+
+// ===== ズーム =====
+zoomBtns.forEach(btn => {
+  btn.onclick = async () => {
+    if (!track) return;
+    const z = Number(btn.dataset.z);
+
+    if (track.getCapabilities) {
+      const caps = track.getCapabilities();
+      if (caps.zoom) {
+        await track.applyConstraints({ advanced: [{ zoom: Math.min(z, caps.zoom.max) }] });
+        return;
+      }
+    }
+    video.style.transform = `scale(${z})`;
+  };
 });
-      } catch (e) {
-        alert('撮影できませんでした');
-      }
-    });
-            } catch {
-              alert('この端末／ブラウザではRAW撮影に対応していません。JPEGで保存します。');
-              blob = await imageCapture.takePhoto();
-            }
-          } else {
-            blob = await imageCapture.takePhoto();
-          }
-        } else {
-          // フォールバック（RAW不可）
-          const c = document.createElement('canvas');
-          c.width = video.videoWidth; c.height = video.videoHeight;
-          const ctx = c.getContext('2d');
-          ctx.drawImage(video, 0, 0);
-          blob = await new Promise(res => c.toBlob(res, 'image/jpeg', 0.95));
-        }
-        const a = document.createElement('a');
-        const url = URL.createObjectURL(blob);
-        const ext = blob.type.includes('raw') ? 'dng' : 'jpg';
-        a.href = url;
-        a.download = `photo_${Date.now()}.${ext}`;
-        document.body.appendChild(a);
-        a.click();
-        a.remove();
-        URL.revokeObjectURL(url);
-      } catch (e) {
-        alert('撮影できませんでした');
-      }
-    });
 
-    // ズーム（対応端末では光学/デジタルズーム、非対応はCSS拡大）
-    zoomBtns.forEach(btn => btn.addEventListener('click', async () => {
-      const z = Number(btn.dataset.z);
-      if (track && track.getCapabilities) {
-        const caps = track.getCapabilities();
-        if (caps.zoom) {
-          const zoom = Math.min(Math.max(z, caps.zoom.min), caps.zoom.max);
-          await track.applyConstraints({ advanced: [{ zoom }] });
-          return;
-        }
-      }
-      // フォールバック
-      video.style.transform = `scale(${z})`;
-    }));
-
-    // カメラ起動はユーザー操作必須（iOS対策）
-    backBtn.onclick = () => {
-  preview.style.display = 'none';
-  video.style.display = 'block';
-  document.getElementById('controls').style.display = 'flex';
-  document.getElementById('zoom').style.display = 'flex';
-  URL.revokeObjectURL(previewImg.src);
-};
-
-// カメラ起動はユーザー操作必須（iOS対策）
+// ===== ガイド ON / OFF =====
 guideToggle.onclick = () => {
-  const on = guide.style.display !== 'block';
-  guide.style.display = on ? 'block' : 'none';
-  guideToggle.textContent = on ? 'ガイドOFF' : 'ガイドON';
+  const show = guide.style.display !== 'block';
+  guide.style.display = show ? 'block' : 'none';
+  guideToggle.textContent = show ? 'ガイドOFF' : 'ガイドON';
 };
-
-// カメラ起動はユーザー操作必須（iOS対策）
-document.getElementById('startCamera').addEventListener('click', () => {
-      startCamera();
-    });
-  </script>
+</script>
 </body>
 </html>
