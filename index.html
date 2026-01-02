@@ -34,15 +34,26 @@ video{
   font-size:14px;
 }
 
-/* 上部UI */
+/* ===== 上部UI ===== */
 #topBar{
   position:absolute;
-  top:16px;left:16px;right:16px;
+  top:16px;left:0;right:0;
   display:flex;
-  justify-content:space-between;
+  justify-content:center;
+  pointer-events:auto;
   z-index:10;
 }
-#orientationBtns{display:flex;gap:8px;}
+#orientationBtns{
+  display:flex;
+  gap:8px;
+}
+
+/* 再起動ボタン */
+#reloadBtn{
+  position:absolute;
+  right:16px;
+  top:0;
+}
 
 /* シャッター */
 #controls{
@@ -145,15 +156,16 @@ const shareBtn = document.getElementById('shareBtn');
 const reloadBtn = document.getElementById('reloadBtn');
 const landBtn = document.getElementById('landBtn');
 const portBtn = document.getElementById('portBtn');
+const topBar = document.getElementById('topBar');
 
 let track, imageCapture;
-let orientation = 'landscape'; // 保存用構図
+let orientation = 'landscape';
 
-// 構図切替
+/* 構図切替 */
 landBtn.onclick = ()=> orientation='landscape';
 portBtn.onclick = ()=> orientation='portrait';
 
-// カメラ起動
+/* カメラ起動 */
 (async()=>{
   const stream = await navigator.mediaDevices.getUserMedia({
     video:{facingMode:'environment',width:{ideal:4032},height:{ideal:3024}}
@@ -163,7 +175,7 @@ portBtn.onclick = ()=> orientation='portrait';
   if('ImageCapture' in window) imageCapture = new ImageCapture(track);
 })();
 
-// Canvasで保存用画像生成
+/* 保存用画像生成 */
 async function createOutputBlob(){
   let blob;
   if(imageCapture?.takePhoto){
@@ -183,8 +195,8 @@ async function createOutputBlob(){
   const ctx = canvas.getContext('2d');
 
   if(orientation==='portrait'){
-    const w = img.height*3/4;
-    const x = (img.width-w)/2;
+    const w = img.height * 3 / 4;
+    const x = (img.width - w) / 2;
     canvas.width = img.height;
     canvas.height = w;
     ctx.translate(canvas.width/2,canvas.height/2);
@@ -199,7 +211,7 @@ async function createOutputBlob(){
   return new Promise(r=>canvas.toBlob(r,'image/jpeg',0.95));
 }
 
-// 撮影
+/* 撮影 */
 shutter.onclick = async ()=>{
   const outBlob = await createOutputBlob();
   previewImg.src = URL.createObjectURL(outBlob);
@@ -207,24 +219,26 @@ shutter.onclick = async ()=>{
   preview.style.display='block';
   controls.style.display='none';
   zoom.style.display='none';
+  topBar.style.display='none';
 };
 
-// 戻る
+/* 戻る */
 backBtn.onclick=()=>{
   preview.style.display='none';
   controls.style.display='flex';
   zoom.style.display='flex';
+  topBar.style.display='flex';
   URL.revokeObjectURL(previewImg.src);
 };
 
-// 共有
+/* 共有 */
 shareBtn.onclick=async()=>{
   const blob = await fetch(previewImg.src).then(r=>r.blob());
   const file = new File([blob],'photo.jpg',{type:'image/jpeg'});
   await navigator.share({files:[file]});
 };
 
-// 再起動
+/* 再起動 */
 reloadBtn.onclick=()=>location.reload();
 </script>
 </body>
