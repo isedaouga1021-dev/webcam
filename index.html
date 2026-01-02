@@ -43,6 +43,17 @@
   <div id="wrap">
     <video id="video" autoplay playsinline></video>
 
+    <div id="mode" style="position:absolute;left:16px;top:16px;pointer-events:auto;">
+      <button id="autoBtn" class="zbtn">AUTO</button>
+      <button id="manualBtn" class="zbtn">MANUAL</button>
+    </div>
+
+    <div id="manualControls" style="position:absolute;left:16px;top:70px;display:none;flex-direction:column;gap:8px;pointer-events:auto;">
+      <label class="zbtn">SS <input id="shutterSpeed" type="range" min="1" max="1000" value="60"></label>
+      <label class="zbtn">ISO <input id="iso" type="range" min="50" max="3200" value="100"></label>
+      <label class="zbtn">EXP <input id="exposure" type="range" min="-3" max="3" step="0.1" value="0"></label>
+    </div>
+
     <div id="zoom">
       <button class="zbtn" data-z="1">1×</button>
       <button class="zbtn" data-z="2">2×</button>
@@ -66,6 +77,7 @@
     const zoomBtns = document.querySelectorAll('.zbtn');
     const formatSel = document.getElementById('format');
     let stream, track, imageCapture;
+    let manual = false;
 
     async function startCamera() {
       // 可能な限り最大画質を要求（最終的な解像度は端末依存）
@@ -85,11 +97,21 @@
     // シャッター：確認画面なしで即ダウンロード
     shutter.addEventListener('click', async () => {
       try {
+        const format = formatSel.value; // jpeg or raw
         let blob;
         if (imageCapture && imageCapture.takePhoto) {
-          blob = await imageCapture.takePhoto();
+          if (format === 'raw') {
+            try {
+              blob = await imageCapture.takePhoto({ imageFormat: 'image/raw' });
+            } catch {
+              alert('この端末／ブラウザではRAW撮影に対応していません。JPEGで保存します。');
+              blob = await imageCapture.takePhoto();
+            }
+          } else {
+            blob = await imageCapture.takePhoto();
+          }
         } else {
-          // フォールバック：Canvas
+          // フォールバック（RAW不可）
           const c = document.createElement('canvas');
           c.width = video.videoWidth; c.height = video.videoHeight;
           const ctx = c.getContext('2d');
@@ -98,8 +120,9 @@
         }
         const a = document.createElement('a');
         const url = URL.createObjectURL(blob);
+        const ext = blob.type.includes('raw') ? 'dng' : 'jpg';
         a.href = url;
-        a.download = `photo_${Date.now()}.jpg`;
+        a.download = `photo_${Date.now()}.${ext}`;
         document.body.appendChild(a);
         a.click();
         a.remove();
@@ -123,6 +146,51 @@
       // フォールバック
       video.style.transform = `scale(${z})`;
     }));
+
+    // モード切替
+    const autoBtn = document.getElementById('autoBtn');
+    const manualBtn = document.getElementById('manualBtn');
+    const manualControls = document.getElementById('manualControls');
+
+    autoBtn.onclick = async () => {
+      manual = false;
+      manualControls.style.display = 'none';
+      if (track) {
+        try {
+          await track.applyConstraints({ advanced: [{ exposureMode: 'continuous' }] });
+        } catch {}
+      }
+    };
+
+    manualBtn.onclick = async () => {
+      manual = true;
+      manualControls.style.display = 'flex';
+      if (track) {
+        try {
+          await track.applyConstraints({ advanced: [{ exposureMode: 'manual' }] });
+        } catch {}
+      }
+    };
+
+    // マニュアル操作
+    const ss = document.getElementById('shutterSpeed');
+    const iso = document.getElementById('iso');
+    const exp = document.getElementById('exposure');
+
+    async function applyManual() {
+      if (!track || !manual) return;
+      try {
+        await track.applyConstraints({
+          advanced: [{
+            exposureTime: 1000000 / Number(ss.value),
+            iso: Number(iso.value),
+            exposureCompensation: Number(exp.value)
+          }]
+        });
+      } catch {}
+    }
+
+    ss.oninput = iso.oninput = exp.oninput = applyManual;
 
     // 起動
     startCamera();
