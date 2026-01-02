@@ -65,7 +65,7 @@
     </div>
   </div>
 
-    <video id="video" playsinline></video>
+    <video id="video" autoplay playsinline></video>
 
     <button id="startCamera" class="zbtn" style="position:absolute;top:12px;right:12px;height:36px;padding:0 10px;font-size:12px;pointer-events:auto;">起動</button>
 
@@ -109,7 +109,32 @@ async function startCamera() {
   try {
     if (stream) {
       stream.getTracks().forEach(t => t.stop());
+      stream = null;
     }
+
+    stream = await navigator.mediaDevices.getUserMedia({
+      video: {
+        facingMode: { ideal: 'environment' }
+      },
+      audio: false
+    });
+
+    video.srcObject = stream;
+    video.muted = true; // iOS必須
+    video.setAttribute('playsinline', '');
+
+    await video.play();
+
+    track = stream.getVideoTracks()[0];
+    imageCapture = 'ImageCapture' in window ? new ImageCapture(track) : null;
+
+    startBtn.style.display = 'none';
+  } catch (e) {
+    console.error(e);
+    alert('カメラを起動できませんでした（HTTPSかSafariで開いていますか？）');
+    startBtn.style.display = 'block';
+  }
+}
 
     stream = await navigator.mediaDevices.getUserMedia({
       video: {
