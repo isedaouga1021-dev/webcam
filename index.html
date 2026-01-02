@@ -1,37 +1,28 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
 <title>iPad Camera</title>
 
 <style>
 html,body{
-  margin:0;
-  height:100%;
-  background:#000;
-  overflow:hidden;
+  margin:0;height:100%;background:#000;overflow:hidden;
 }
-#wrap{
-  position:relative;
-  width:100%;
-  height:100%;
-}
+#wrap{position:relative;width:100%;height:100%;}
 
-/* ===== カメラ表示（横いっぱい＋4:3） ===== */
+/* ===== カメラ表示（4:3が必ず全体見える） ===== */
 #cameraFrame{
-  position:absolute;
-  inset:0;
+  position:absolute;inset:0;
   display:flex;
   justify-content:center;
-  background:#000;
+  align-items:center;
 }
-#cameraFrame video{
+video{
   width:100%;
-  height:auto;
-  aspect-ratio:4 / 3;
-  object-fit:cover;
-  align-self:center;
+  max-height:100%;
+  aspect-ratio:4/3;
+  object-fit:contain; /* ← 重要 */
 }
 
 /* 共通ボタン */
@@ -40,50 +31,47 @@ html,body{
   color:#fff;
   border:1px solid #fff;
   border-radius:999px;
-  padding:10px 14px;
-  font-size:16px;
+  padding:8px 14px;
+  font-size:14px;
+}
+
+/* 上部UI */
+#topBar{
+  position:absolute;
+  top:16px;left:0;right:0;
+  display:flex;
+  justify-content:center;
+  z-index:10;
+}
+#orientationBtns{display:flex;gap:8px;}
+#reloadBtn{
+  position:absolute;
+  right:16px;
 }
 
 /* シャッター */
 #controls{
   position:absolute;
-  left:0; right:0;
-  bottom:20px;
-  display:flex;
-  justify-content:center;
+  left:0;right:0;bottom:20px;
+  display:flex;justify-content:center;
 }
 #shutter{
-  width:76px;
-  height:76px;
+  width:76px;height:76px;
   border-radius:50%;
-  background:#fff;
-  border:none;
+  background:#fff;border:none;
 }
 
 /* ズーム */
 #zoom{
   position:absolute;
-  right:16px;
-  bottom:110px;
-  display:flex;
-  flex-direction:column;
-  gap:10px;
-}
-
-/* 再起動 */
-#reloadBtn{
-  position:absolute;
-  top:16px;
-  right:16px;
-  z-index:10;
+  right:16px;bottom:110px;
+  display:flex;flex-direction:column;gap:10px;
 }
 
 /* ===== プレビュー ===== */
 #preview{
   display:none;
-  position:absolute;
-  inset:0;
-  background:#000;
+  position:absolute;inset:0;background:#000;
 }
 #previewImg{
   position:absolute;
@@ -93,16 +81,12 @@ html,body{
   object-fit:contain;
 }
 #previewTop{
-  position:absolute;
-  top:16px;
-  left:16px;
+  position:absolute;top:16px;left:16px;
 }
 #shareBar{
   position:absolute;
-  left:0; right:0;
-  bottom:24px;
-  display:flex;
-  justify-content:center;
+  left:0;right:0;bottom:24px;
+  display:flex;justify-content:center;
 }
 #shareBtn{
   width:70%;
@@ -115,13 +99,19 @@ html,body{
 <body>
 <div id="wrap">
 
+  <!-- 上部バー -->
+  <div id="topBar">
+    <div id="orientationBtns">
+      <button id="landBtn" class="zbtn">横</button>
+      <button id="portBtn" class="zbtn">縦</button>
+    </div>
+    <button id="reloadBtn" class="zbtn">⟳</button>
+  </div>
+
   <!-- カメラ -->
   <div id="cameraFrame">
     <video id="video" autoplay playsinline></video>
   </div>
-
-  <!-- 再起動 -->
-  <button id="reloadBtn" class="zbtn">⟳</button>
 
   <!-- プレビュー -->
   <div id="preview">
@@ -139,7 +129,6 @@ html,body{
     <button class="zbtn" data-z="1">1×</button>
     <button class="zbtn" data-z="2">2×</button>
     <button class="zbtn" data-z="4">4×</button>
-    <button class="zbtn" data-z="8">8×</button>
   </div>
 
   <!-- シャッター -->
@@ -154,96 +143,78 @@ const video = document.getElementById('video');
 const shutter = document.getElementById('shutter');
 const zoom = document.getElementById('zoom');
 const controls = document.getElementById('controls');
-const zoomBtns = document.querySelectorAll('[data-z]');
 const preview = document.getElementById('preview');
 const previewImg = document.getElementById('previewImg');
 const backBtn = document.getElementById('backBtn');
 const shareBtn = document.getElementById('shareBtn');
 const reloadBtn = document.getElementById('reloadBtn');
+const landBtn = document.getElementById('landBtn');
+const portBtn = document.getElementById('portBtn');
+const topBar = document.getElementById('topBar');
 
-let stream, track, imageCapture;
+let track;
+let orientation = 'landscape';
 
-// カメラ起動
-async function startCamera(){
-  stream = await navigator.mediaDevices.getUserMedia({
-    video:{
-      facingMode:'environment',
-      width:{ideal:4032},
-      height:{ideal:3024}
-    }
+/* 構図切替 */
+landBtn.onclick = ()=>orientation='landscape';
+portBtn.onclick = ()=>orientation='portrait';
+
+/* カメラ起動 */
+(async()=>{
+  const stream = await navigator.mediaDevices.getUserMedia({
+    video:{facingMode:'environment'}
   });
   video.srcObject = stream;
   track = stream.getVideoTracks()[0];
-  if('ImageCapture' in window){
-    imageCapture = new ImageCapture(track);
-  }
-}
-startCamera();
+})();
 
-// 撮影
+/* 撮影（表示と完全一致） */
 shutter.onclick = async ()=>{
-  let blob;
-  if(imageCapture?.takePhoto){
-    blob = await imageCapture.takePhoto();
+  const vw = video.videoWidth;
+  const vh = video.videoHeight;
+
+  const canvas = document.createElement('canvas');
+  const ctx = canvas.getContext('2d');
+
+  if(orientation==='portrait'){
+    canvas.width = vh;
+    canvas.height = vw;
+    ctx.translate(canvas.width/2, canvas.height/2);
+    ctx.rotate(-Math.PI/2);
+    ctx.drawImage(video, -vw/2, -vh/2);
   }else{
-    const c = document.createElement('canvas');
-    c.width = video.videoWidth;
-    c.height = video.videoHeight;
-    c.getContext('2d').drawImage(video,0,0);
-    blob = await new Promise(r=>c.toBlob(r,'image/jpeg',0.95));
+    canvas.width = vw;
+    canvas.height = vh;
+    ctx.drawImage(video, 0, 0);
   }
 
+  const blob = await new Promise(r=>canvas.toBlob(r,'image/jpeg',0.95));
   previewImg.src = URL.createObjectURL(blob);
 
-  preview.style.display = 'block';
-  controls.style.display = 'none';
-  zoom.style.display = 'none';
+  preview.style.display='block';
+  controls.style.display='none';
+  zoom.style.display='none';
+  topBar.style.display='none';
 };
 
-// 戻る
-backBtn.onclick = ()=>{
-  preview.style.display = 'none';
-  controls.style.display = 'flex';
-  zoom.style.display = 'flex';
+/* 戻る */
+backBtn.onclick=()=>{
+  preview.style.display='none';
+  controls.style.display='flex';
+  zoom.style.display='flex';
+  topBar.style.display='flex';
   URL.revokeObjectURL(previewImg.src);
 };
 
-// 共有
-shareBtn.onclick = async ()=>{
-  if(!navigator.share){
-    const a = document.createElement('a');
-    a.href = previewImg.src;
-    a.download = `photo_${Date.now()}.jpg`;
-    a.click();
-    return;
-  }
-  const res = await fetch(previewImg.src);
-  const blob = await res.blob();
-  const file = new File([blob], `photo_${Date.now()}.jpg`, {type:'image/jpeg'});
-  try{
-    await navigator.share({files:[file], title:'Photo'});
-  }catch{}
+/* 共有 */
+shareBtn.onclick=async()=>{
+  const blob = await fetch(previewImg.src).then(r=>r.blob());
+  const file = new File([blob],'photo.jpg',{type:'image/jpeg'});
+  await navigator.share({files:[file]});
 };
 
-// ズーム
-zoomBtns.forEach(b=>{
-  b.onclick = async ()=>{
-    const z = Number(b.dataset.z);
-    if(track?.getCapabilities){
-      const caps = track.getCapabilities();
-      if(caps.zoom){
-        await track.applyConstraints({
-          advanced:[{zoom:Math.min(z,caps.zoom.max)}]
-        });
-        return;
-      }
-    }
-    video.style.transform = `scale(${z})`;
-  };
-});
-
-// 再起動
-reloadBtn.onclick = ()=> location.reload();
+/* 再起動 */
+reloadBtn.onclick=()=>location.reload();
 </script>
 </body>
 </html>
