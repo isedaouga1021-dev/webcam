@@ -11,7 +11,7 @@ html,body{
 }
 #wrap{position:relative;width:100%;height:100%;}
 
-/* ===== カメラ表示（4:3が必ず全体見える） ===== */
+/* ===== カメラ表示（少し大きめ） ===== */
 #cameraFrame{
   position:absolute;inset:0;
   display:flex;
@@ -19,10 +19,10 @@ html,body{
   align-items:center;
 }
 video{
-  width:100%;
-  max-height:100%;
+  width:95%;
+  max-height:95%;
   aspect-ratio:4/3;
-  object-fit:contain; /* ← 重要 */
+  object-fit:cover;
 }
 
 /* 共通ボタン */
@@ -35,18 +35,12 @@ video{
   font-size:14px;
 }
 
-/* 上部UI */
-#topBar{
-  position:absolute;
-  top:16px;left:0;right:0;
-  display:flex;
-  justify-content:center;
-  z-index:10;
-}
-#orientationBtns{display:flex;gap:8px;}
+/* 再起動 */
 #reloadBtn{
   position:absolute;
+  top:16px;
   right:16px;
+  z-index:10;
 }
 
 /* シャッター */
@@ -99,14 +93,7 @@ video{
 <body>
 <div id="wrap">
 
-  <!-- 上部バー -->
-  <div id="topBar">
-    <div id="orientationBtns">
-      <button id="landBtn" class="zbtn">横</button>
-      <button id="portBtn" class="zbtn">縦</button>
-    </div>
-    <button id="reloadBtn" class="zbtn">⟳</button>
-  </div>
+  <button id="reloadBtn" class="zbtn">⟳</button>
 
   <!-- カメラ -->
   <div id="cameraFrame">
@@ -141,23 +128,16 @@ video{
 <script>
 const video = document.getElementById('video');
 const shutter = document.getElementById('shutter');
-const zoom = document.getElementById('zoom');
+const zoomBtns = document.querySelectorAll('[data-z]');
 const controls = document.getElementById('controls');
+const zoom = document.getElementById('zoom');
 const preview = document.getElementById('preview');
 const previewImg = document.getElementById('previewImg');
 const backBtn = document.getElementById('backBtn');
 const shareBtn = document.getElementById('shareBtn');
 const reloadBtn = document.getElementById('reloadBtn');
-const landBtn = document.getElementById('landBtn');
-const portBtn = document.getElementById('portBtn');
-const topBar = document.getElementById('topBar');
 
-let track;
-let orientation = 'landscape';
-
-/* 構図切替 */
-landBtn.onclick = ()=>orientation='landscape';
-portBtn.onclick = ()=>orientation='portrait';
+let zoomLevel = 1;
 
 /* カメラ起動 */
 (async()=>{
@@ -165,28 +145,34 @@ portBtn.onclick = ()=>orientation='portrait';
     video:{facingMode:'environment'}
   });
   video.srcObject = stream;
-  track = stream.getVideoTracks()[0];
 })();
 
-/* 撮影（表示と完全一致） */
+/* ズーム（表示＋撮影両対応） */
+zoomBtns.forEach(btn=>{
+  btn.onclick = ()=>{
+    zoomLevel = Number(btn.dataset.z);
+  };
+});
+
+/* 撮影（ズーム反映） */
 shutter.onclick = async ()=>{
   const vw = video.videoWidth;
   const vh = video.videoHeight;
 
-  const canvas = document.createElement('canvas');
-  const ctx = canvas.getContext('2d');
+  const sw = vw / zoomLevel;
+  const sh = vh / zoomLevel;
+  const sx = (vw - sw) / 2;
+  const sy = (vh - sh) / 2;
 
-  if(orientation==='portrait'){
-    canvas.width = vh;
-    canvas.height = vw;
-    ctx.translate(canvas.width/2, canvas.height/2);
-    ctx.rotate(-Math.PI/2);
-    ctx.drawImage(video, -vw/2, -vh/2);
-  }else{
-    canvas.width = vw;
-    canvas.height = vh;
-    ctx.drawImage(video, 0, 0);
-  }
+  const canvas = document.createElement('canvas');
+  canvas.width = sw;
+  canvas.height = sh;
+
+  canvas.getContext('2d').drawImage(
+    video,
+    sx, sy, sw, sh,
+    0, 0, sw, sh
+  );
 
   const blob = await new Promise(r=>canvas.toBlob(r,'image/jpeg',0.95));
   previewImg.src = URL.createObjectURL(blob);
@@ -194,7 +180,6 @@ shutter.onclick = async ()=>{
   preview.style.display='block';
   controls.style.display='none';
   zoom.style.display='none';
-  topBar.style.display='none';
 };
 
 /* 戻る */
@@ -202,7 +187,6 @@ backBtn.onclick=()=>{
   preview.style.display='none';
   controls.style.display='flex';
   zoom.style.display='flex';
-  topBar.style.display='flex';
   URL.revokeObjectURL(previewImg.src);
 };
 
