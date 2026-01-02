@@ -1,151 +1,86 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
-  <title>Simple iPad Camera</title>
-  <style>
-    html, body {
-      margin: 0; padding: 0; height: 100%; background: #000; overflow: hidden;
-    }
-    #wrap {
-      position: relative; width: 100%; height: 100%;
-      display: flex; align-items: center; justify-content: center;
-    }
-    /* カメラ表示（安定優先・全体が必ず見える） */
-    video {
-      width: 90vw;
-      max-height: 90vh;
-      aspect-ratio: 3 / 4; /* 縦4:横3 */
-      object-fit: contain;
-      background: #000;
-    }
-    /* ガイド枠（3×3） */
-    #guide {
-      position: absolute;
-      width: 90vw;
-      max-height: 90vh;
-      aspect-ratio: 3 / 4;
-      display: grid;
-      grid-template-columns: repeat(3, 1fr);
-      grid-template-rows: repeat(3, 1fr);
-      pointer-events: none;
-    }
-    #guide div {
-      border: 1px solid rgba(255,255,255,0.3);
-    }
-    /* 下部UI */
-    #controls {
-      position: absolute; bottom: 24px; left: 0; right: 0;
-      display: flex; justify-content: center; align-items: center;
-      gap: 20px;
-    }
-    #shutter {
-      width: 72px; height: 72px; border-radius: 50%; border: none;
-      background: #fff;
-    }
-    .btn {
-      background: rgba(0,0,0,0.6); color: #fff;
-      border: 1px solid #fff; border-radius: 8px;
-      padding: 6px 10px; font-size: 14px;
-    }
-    /* プレビュー */
-    #preview {
-      position: absolute; inset: 0; background: #000;
-      display: none; align-items: center; justify-content: center;
-      flex-direction: column;
-    }
-    #preview img {
-      max-width: 90%; max-height: 70%;
-    }
-    #previewControls {
-      margin-top: 20px; display: flex; gap: 20px;
-    }
-  </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>Simple iPad Camera</title>
+<style>
+html,body{margin:0;height:100%;background:#000;overflow:hidden}
+#wrap{position:relative;height:100%;display:flex;align-items:center;justify-content:center}
+#cameraBox{position:relative;width:90vw;aspect-ratio:3/4;background:#000}
+video,canvas,img{width:100%;height:100%;object-fit:contain}
+#grid{position:absolute;inset:0;display:none;pointer-events:none}
+#grid div{position:absolute;background:rgba(255,255,255,.4)}
+#grid .v1{left:33%;top:0;width:1px;height:100%}
+#grid .v2{left:66%;top:0;width:1px;height:100%}
+#grid .h1{top:33%;left:0;height:1px;width:100%}
+#grid .h2{top:66%;left:0;height:1px;width:100%}
+#ui{position:absolute;bottom:20px;width:100%;display:flex;justify-content:center;gap:20px}
+button{background:rgba(0,0,0,.6);color:#fff;border:1px solid #fff;border-radius:999px;padding:10px 14px}
+#shutter{width:70px;height:70px;border-radius:50%;background:#fff;border:none}
+#zoom{position:absolute;right:10px;bottom:120px;display:flex;flex-direction:column;gap:8px}
+#preview{position:absolute;inset:0;display:none;flex-direction:column;justify-content:space-between}
+#preview img{flex:1}
+#pui{display:flex;justify-content:space-between;padding:10px}
+</style>
 </head>
 <body>
 <div id="wrap">
-  <video id="video" playsinline></video>
-  <div id="guide">
-    <div></div><div></div><div></div>
-    <div></div><div></div><div></div>
-    <div></div><div></div><div></div>
-  </div>
-
-  <div id="controls">
-    <button id="toggleGuide" class="btn">ガイドON/OFF</button>
-    <button id="shutter"></button>
-  </div>
-
-  <div id="preview">
-    <img id="previewImg" />
-    <div id="previewControls">
-      <button id="back" class="btn">カメラに戻る</button>
-      <button id="share" class="btn">共有</button>
+  <div id="cameraBox">
+    <video id="video" playsinline></video>
+    <div id="grid">
+      <div class="v1"></div><div class="v2"></div>
+      <div class="h1"></div><div class="h2"></div>
+    </div>
+    <div id="preview">
+      <img id="pimg">
+      <div id="pui">
+        <button id="back">戻る</button>
+        <button id="share">共有</button>
+      </div>
     </div>
   </div>
+  <div id="zoom">
+    <button data-z="1">1×</button>
+    <button data-z="2">2×</button>
+    <button data-z="4">4×</button>
+  </div>
+  <div id="ui">
+    <button id="gridBtn">GRID</button>
+    <button id="shutter"></button>
+  </div>
 </div>
-
 <script>
-const video = document.getElementById('video');
-const shutter = document.getElementById('shutter');
-const guide = document.getElementById('guide');
-const toggleGuide = document.getElementById('toggleGuide');
-const preview = document.getElementById('preview');
-const previewImg = document.getElementById('previewImg');
-const backBtn = document.getElementById('back');
-const shareBtn = document.getElementById('share');
-
-let stream = null;
-
-async function startCamera() {
-  try {
-    if (stream) {
-      stream.getTracks().forEach(t => t.stop());
-    }
-    stream = await navigator.mediaDevices.getUserMedia({
-      video: { facingMode: 'environment' },
-      audio: false
-    });
-    video.srcObject = stream;
-    video.muted = true;
-    await video.play();
-  } catch (e) {
-    alert('カメラ起動失敗。Safariを再起動してください');
-  }
+const v=video,p=preview,pi=pimg;
+let s,t,blob;
+async function start(){
+  if(s) s.getTracks().forEach(x=>x.stop());
+  s=await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment'},audio:false});
+  v.srcObject=s;v.muted=true;await v.play();
+  t=s.getVideoTracks()[0];
 }
-
-shutter.addEventListener('click', async () => {
-  const canvas = document.createElement('canvas');
-  canvas.width = video.videoWidth;
-  canvas.height = video.videoHeight;
-  const ctx = canvas.getContext('2d');
-  ctx.drawImage(video, 0, 0);
-  const blob = await new Promise(r => canvas.toBlob(r, 'image/jpeg', 0.95));
-
-  previewImg.src = URL.createObjectURL(blob);
-  preview.style.display = 'flex';
-});
-
-backBtn.addEventListener('click', () => {
-  preview.style.display = 'none';
-});
-
-shareBtn.addEventListener('click', async () => {
-  if (!navigator.share) {
-    alert('この端末では共有できません'); return;
+start();
+shutter.onclick=async()=>{
+  const c=document.createElement('canvas');
+  c.width=v.videoWidth;c.height=v.videoHeight;
+  c.getContext('2d').drawImage(v,0,0);
+  blob=await new Promise(r=>c.toBlob(r,'image/jpeg',0.95));
+  pi.src=URL.createObjectURL(blob);
+  p.style.display='flex';
+};
+back.onclick=()=>{URL.revokeObjectURL(pi.src);p.style.display='none'};
+share.onclick=async()=>{
+  if(navigator.share) await navigator.share({files:[new File([blob],'photo.jpg',{type:'image/jpeg'})]});
+};
+gridBtn.onclick=()=>grid.style.display=grid.style.display?'':'block';
+document.querySelectorAll('[data-z]').forEach(b=>b.onclick=async()=>{
+  const z=+b.dataset.z;
+  if(t?.getCapabilities){
+    const c=t.getCapabilities();
+    if(c.zoom) return t.applyConstraints({advanced:[{zoom:Math.min(z,c.zoom.max)}]});
   }
-  const res = await fetch(previewImg.src);
-  const blob = await res.blob();
-  const file = new File([blob], 'photo.jpg', { type: 'image/jpeg' });
-  await navigator.share({ files: [file] });
+  v.style.transform=`scale(${z})`;
 });
-
-toggleGuide.addEventListener('click', () => {
-  guide.style.display = guide.style.display === 'none' ? 'grid' : 'none';
-});
-
-startCamera();
 </script>
 </body>
 </html>
