@@ -12,9 +12,15 @@
     #wrap {
       position: relative; width: 100%; height: 100%;
     }
-    video {
-      position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover;
-    }
+    video{
+  position:absolute;
+  top:50%;left:50%;
+  transform:translate(-50%,-50%);
+  width:90vw;
+  height:calc(90vw * 4 / 3);
+  max-height:80vh;
+  object-fit:contain; /* 収まり優先 */
+}
     /* 下部UI */
     #controls {
       position: absolute; left: 0; right: 0; bottom: 20px;
@@ -106,6 +112,32 @@ let imageCapture = null;
 
 // ===== カメラ起動 =====
 async function startCamera() {
+  const btn = document.getElementById('startCamera');
+  try {
+    if (stream) {
+      stream.getTracks().forEach(t => t.stop());
+      stream = null;
+    }
+
+    stream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode:{ ideal:'environment' } },
+      audio:false
+    });
+
+    video.srcObject = stream;
+    video.muted = true;
+    await video.play();
+
+    track = stream.getVideoTracks()[0];
+    imageCapture = 'ImageCapture' in window ? new ImageCapture(track) : null;
+
+    btn.style.display = 'none';
+  } catch (e) {
+    console.error(e);
+    btn.style.display = 'block';
+    alert('カメラ起動に失敗しました');
+  }
+}() {
   try {
     if (stream) {
       stream.getTracks().forEach(t => t.stop());
@@ -177,11 +209,19 @@ shutter.onclick = async () => {
   }
 
   const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = `photo_${Date.now()}.jpg`;
-  a.click();
-  URL.revokeObjectURL(url);
+  previewImg.src = url;
+  preview.style.display = 'block';
+  video.style.display = 'none';
+  document.getElementById('controls').style.display = 'none';
+  document.getElementById('zoom').style.display = 'none';
+
+  shareBtn.onclick = async () => {
+    if (navigator.share) {
+      const file = new File([blob], `photo_${Date.now()}.jpg`, { type: 'image/jpeg' });
+      try { await navigator.share({ files:[file] }); } catch {}
+    }
+  };
+};(url);
 };
 
 // ===== ズーム =====
